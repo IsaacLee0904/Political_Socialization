@@ -3,6 +3,9 @@
 import pandas as pd
 import numpy as np
 import ETL_function
+# for factor analysis
+import Factor_Analysis 
+from factor_analyzer import FactorAnalyzer
 
 
 def data_cleaning(filter_data):  
@@ -57,6 +60,7 @@ def data_cleaning(filter_data):
   return ml_df
 
 def feature_engineering(ml_df):
+
   ''' filiter vars by category base on reference '''
   online_pp_vars = ['TV_news_time', 'news_paper_time', 'int_news_time', 'TV_debate',     'read_media', 'like_media', 'share_media', 'comment_media', 'int_discuss']
   offline_pp_vars = ['read_election_news', 'read_election_leaflet', 'convince', 'campaign', 'volunteer', 'election_mayor', 'election_18']
@@ -73,13 +77,88 @@ def feature_engineering(ml_df):
   
 def anti_party_feature(ml_df):
   
-  # anti_party index 
+  ''' Filter out DV '''
+  DV_vars = ['TV_news_time', 'news_paper_time', 'int_news_time', 'TV_debate', 'read_media', 'like_media', 'share_media', 'comment_media', 'int_discuss', 'read_election_news', 'read_election_leaflet', 'convince', 'campaign', 'volunteer', 'election_mayor', 'election_18']
+  DV_df = ml_df[DV_vars]
+    
+  ''' establish anti_party index '''
   ## 因素分析 -> 根據構面取平均
-  political_polarization_vars = ['anti_1']
-  party_image_vars = ['anti_3', 'anti_4', 'anti_5']
-  ml_df['political_polarization_mean'] = ml_df[political_polarization_vars].mean(axis=1)
-  ml_df['party_image_mean'] = ml_df[party_image_vars].mean(axis=1)
+  online_media_pp_vars = ['read_media', 'like_media', 'share_media', 'comment_media']
+  voting_vars = ['election_mayor', 'election_18']
+  offline_media_pp_vars = ['read_election_news', 'read_election_leaflet']
+  campaign_worker_pp_vars = ['campaign', 'volunteer']
+  ml_df['online_media_pp_mean'] = ml_df[online_media_pp_vars].mean(axis=1)
+  ml_df['voting_mean'] = ml_df[voting_vars].mean(axis=1)
+  ml_df['offline_media_pp_mean'] = ml_df[offline_media_pp_vars].mean(axis=1)
+  ml_df['campaign_worker_pp_mean'] = ml_df[campaign_worker_pp_vars].mean(axis=1)
+
   ## 因素分析 -> 根據構面取綜合得分
-  ## 因素分析 -> 全部算一個綜合得分
+  # Factor analysis with rotation
+  fa = FactorAnalyzer(n_factors = 2, rotation = 'varimax')
+  fa.fit(IV_df)
+  # Create a factor's names
+  facs = ['Factors' + ' ' + str(i + 1) for i in range(2)]
+  df_factors = pd.DataFrame(data = fa.fit_transform(IV_df),columns = facs)
+  df_factors.rename(columns = {'Factors 1': 'political_polarization_score', 
+                             'Factors 2': 'party_image_score'}, inplace = True)  
+  ml_df = ml_df.join(df_factors)                   
+
+  ## 因素分析 -> 全部算一個綜合得分 : (factor1_value * factor1_Proportion + factor2_value * factor2_Proportion) / Cumulative Variance
+  # Divide by the cumulative variance to get the final scores
+  ml_df['anti_party_scores'] = (ml_df['political_polarization_score'] * fa.get_factor_variance()[1][0] 
+                               + ml_df['party_image_score'] * fa.get_factor_variance()[1][1]) / fa.get_factor_variance()[1].sum()
+  
+  return ml_df
+
+
+def DV_feature(ml_df):
+  
+  ''' Filter out DV '''
+  DV_vars = ['TV_news_time', 'news_paper_time', 'int_news_time', 'TV_debate', 'read_media', 'like_media', 'share_media', 'comment_media', 'int_discuss', 'read_election_news', 'read_election_leaflet', 'convince', 'campaign', 'volunteer', 'election_mayor', 'election_18']
+  DV_df = ml_df[DV_vars]
+  
+  online_media_pp_vars = ['read_media', 'like_media', 'share_media', 'comment_media']
+  voting_vars = ['election_mayor', 'election_18']
+  offline_media_pp_vars = ['read_election_news', 'read_election_leaflet']
+  campaign_worker_pp_vars = ['campaign', 'volunteer']
+
+  online_pp_vars = ['TV_news_time', 'news_paper_time', 'int_news_time', 'TV_debate', 'read_media', 'like_media', 'share_media', 'comment_media', 'int_discuss']
+  offline_pp_vars = ['read_election_news', 'read_election_leaflet', 'convince', 'campaign', 'volunteer', 'election_mayor', 'election_18']
+  online_pp_df = ml_df[online_pp_vars]
+  offline_pp_df = ml_df[offline_pp_vars]
+    
+  ''' establish DV index '''
+  ## 因素分析 -> 根據構面取平均
+  ml_df['online_media_pp_mean'] = ml_df[online_media_pp_vars].mean(axis=1)
+  ml_df['voting_mean'] = ml_df[voting_vars].mean(axis=1)
+  ml_df['offline_media_pp_mean'] = ml_df[offline_media_pp_vars].mean(axis=1)
+  ml_df['campaign_worker_pp_mean'] = ml_df[campaign_worker_pp_vars].mean(axis=1)
+
+  ## 因素分析 -> 根據構面取綜合得分
+  # Factor analysis with rotation
+  fa = FactorAnalyzer(n_factors = 4, rotation = 'varimax')
+  fa.fit(DV_df)
+  # Create a factor's names
+  facs = ['Factors' + ' ' + str(i + 1) for i in range(4)]
+  df_factors = pd.DataFrame(data = fa.fit_transform(DV_df),columns = facs)                   
+  df_factors.rename(columns = {'Factors 1': 'online_media_pp', 
+                             'Factors 2': 'voting',
+                             'Factors 3': 'offline_media_pp',
+                             'Factors 4': 'campaign_worker_pp'}, inplace = True)
+  ml_df = ml_df.join(df_factors)              
+
+  ## 因素分析 -> 全部算一個綜合得分 : (factor1_value * factor1_Proportion + factor2_value * factor2_Proportion) / Cumulative Variance
+  # online_pp
+  fa_online = FactorAnalyzer(n_factors = 3, rotation = 'varimax')
+  fa_online.fit(online_pp_df)
+  facs = ['Factors' + ' ' + str(i + 1) for i in range(3)]
+  df_factors_onlnie = pd.DataFrame(data = fa.fit_transform(online_pp_df),columns = facs)
+  ml_df['onlnie_scores'] = (df_factors_onlnie['Factors 1'] * fa_online.get_factor_variance()[1][0] + df_factors_onlnie['Factors 2'] * fa_online.get_factor_variance()[1][1] + df_factors_onlnie['Factors 3'] * fa_online.get_factor_variance()[1][2]) / fa_online.get_factor_variance()[1].sum()  
+  # offline_pp
+  fa_offline = FactorAnalyzer(n_factors = 2, rotation = 'varimax')
+  fa_offline.fit(offline_pp_df)
+  facs = ['Factors' + ' ' + str(i + 1) for i in range(2)]
+  df_factors_offlnie = pd.DataFrame(data = fa.fit_transform(offline_pp_df),columns = facs)
+  ml_df['offlnie_scores'] = (df_factors_offlnie['Factors 1'] * fa_offline.get_factor_variance()[1][0] + df_factors_offlnie['Factors 2'] * fa_offline.get_factor_variance()[1][1]) / fa_offline.get_factor_variance()[1].sum()
   
   return ml_df

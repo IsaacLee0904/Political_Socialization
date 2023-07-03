@@ -1,4 +1,4 @@
-## Online_PP and Offline_PP
+''' Online_PP and Offline_PP '''
 # news_time 
 def news_time(x):
     if x == '30分鐘以下':
@@ -129,7 +129,7 @@ def election(x):
     else:
         return float('NaN')
 
-## Demographic variables 
+''' Demographic variables '''
 # sex
 def sex(x):
     if x == '男性':
@@ -185,7 +185,7 @@ def edu(x):
     else:
         return float('NaN')
       
-# inceom
+# income
 def income(x):
     if x == '無收入(例如:為家庭事業工作，但沒有領薪水)':
     	return int(1)
